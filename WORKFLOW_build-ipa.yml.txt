@@ -1,0 +1,40 @@
+name: Build IPA
+on:
+  push:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Locate project
+        run: |
+          DIR=$(dirname "$(find . -name project.yml | head -1)")
+          echo "DIR=$DIR" >> $GITHUB_ENV
+      - name: Create app icon catalog
+        run: |
+          cd "$DIR/Sources"
+          mkdir -p Assets.xcassets/AppIcon.appiconset
+          cp icon.png Assets.xcassets/AppIcon.appiconset/icon.png
+          echo '{"info":{"author":"xcode","version":1}}' > Assets.xcassets/Contents.json
+          echo '{"images":[{"filename":"icon.png","idiom":"universal","platform":"ios","size":"1024x1024"}],"info":{"author":"xcode","version":1}}' > Assets.xcassets/AppIcon.appiconset/Contents.json
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        run: cd "$DIR" && xcodegen generate
+      - name: Build (unsigned)
+        run: |
+          cd "$DIR"
+          xcodebuild -project EyeRest.xcodeproj -scheme EyeRest \
+            -configuration Release -sdk iphoneos -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+      - name: Package IPA
+        run: |
+          cd "$DIR"
+          mkdir Payload
+          cp -R build/Build/Products/Release-iphoneos/EyeRest.app Payload/
+          zip -qr EyeRest.ipa Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EyeRest-ipa
+          path: ${{ env.DIR }}/EyeRest.ipa
